@@ -12,7 +12,7 @@ void finalize() {
     auto tree = (TTree *)data_file->Get("Event"); // main detector
     auto mutree = (TTree *)data_file->Get("PoolMuon");
     auto adtree = (TTree *)ad_file->Get("ad_tree");
-    // auto tree_muon = (TTree *)data_file->Get("PoolMuon"); // outer detector
+    auto shtree = (TTree *)ad_file->Get("sh_tree");
 
     tree->Show(0); // show branches of the tree
     // tree->Print(0); // show variable type of the tree
@@ -21,14 +21,17 @@ void finalize() {
     int total_events = tree->GetEntries();
     int total_muons = mutree->GetEntries();
     int total_ads = adtree->GetEntries();
+    int total_shs = adtree->GetEntries();
     printf("total events: %d\n", total_events);
     printf("total muons: %d\n", total_muons);
     printf("total ADs: %d\n", total_ads);
+    printf("total SHs: %d\n", total_shs);
 
     // set an alias for the tree
     auto Event = tree;
     auto Muon = mutree;
     auto Ad = adtree;
+    auto Sh = shtree;
 
     int t0 = 1574392765;
     
@@ -46,6 +49,7 @@ void finalize() {
     int mnanosec;
     
     double ta;
+    double ts;
     
     float x;
     float y;
@@ -63,13 +67,14 @@ void finalize() {
     Muon->SetBranchAddress("msec", &msec);
     Muon->SetBranchAddress("mnanosec", &mnanosec);
     Ad->SetBranchAddress("t", &ta);
+    Sh->SetBranchAddress("t", &ts);
     
 
     // output file and tree
     auto fout = TFile::Open("output/pair_81408.root", "recreate");
     auto ibd_tree = new TTree("ibd_tree", "");
-    double energy1;
-    double energy2;
+    float energy1;
+    float energy2;
     double ti;
     double tf;
     double t1;
@@ -95,6 +100,7 @@ void finalize() {
     
     int mnt = 0;
     int ant = 0;
+    int shw = 0;
     
     for (int i = 0; i < total_events; ++i) {
         Event->GetEntry(i);
@@ -173,6 +179,19 @@ void finalize() {
         }
         ant = max(ant-1000,0);
         
+        //sh cut for delayed
+        Sh->GetEntry(shw);
+        while(ts<time_delay-1 && ant<total_ads){
+            ++ant;
+            Sh->GetEntry(shw);
+        }
+        if(ts<=1+time_delay && ts>=time_delay-1){
+            ant = max(ant-1000,0);
+            printf("ABORT BY SH");
+            continue;
+        }
+        shw = max(shw-1000,0);
+        
         // time-backward search
         for (int j = event_index_delay - 1; j >= 0; --j) {
             Event->GetEntry(j);
@@ -205,16 +224,13 @@ void finalize() {
             // found prompt signal
             t1 = time_prompt;
             t2 = time_delay;
-//            energy1 = energy;
-//            energy2 = energy_delay;
+            energy2 = energy_delay;
             Event->GetEntry(i);
             x2 = x; y2 = y; z2 = z;
-            energy2 = energy;
             Event->GetEntry(j);
             x1 = x; y1 = y; z1 = z;
-            energy1 = energy;
             cout << "filled!" << endl;
-            cout << energy << endl;
+            energy1 = energy;
             ++cnt;
 
             // print
